@@ -12,7 +12,6 @@ const loginError = ref('')
 const productError = ref('')
 const notice = ref('')
 const search = ref('')
-const activeFilter = ref('all')
 const showProductForm = ref(false)
 const editingProduct = ref(null)
 const loginForm = reactive({ email: '', password: '' })
@@ -21,28 +20,12 @@ const productForm = reactive({ product_name: '', description: '', price: '', qua
 const isAdmin = computed(() => user.value?.role === 'admin')
 const visibleProducts = computed(() => {
   const query = search.value.trim().toLocaleLowerCase()
-  return products.value.filter((product) => {
-    const matchesQuery = !query
-      || product.product_name.toLocaleLowerCase().includes(query)
-      || (product.description || '').toLocaleLowerCase().includes(query)
-    const quantity = Number(product.quantity)
-    const matchesFilter = activeFilter.value === 'all'
-      || (activeFilter.value === 'low' && quantity > 0 && quantity <= 5)
-      || (activeFilter.value === 'out' && quantity === 0)
-    return matchesQuery && matchesFilter
-  })
+  return products.value.filter((product) => (
+    !query
+    || product.product_name.toLocaleLowerCase().includes(query)
+    || (product.description || '').toLocaleLowerCase().includes(query)
+  ))
 })
-
-const inventoryValue = computed(() => products.value.reduce(
-  (sum, product) => sum + Number(product.price) * Number(product.quantity),
-  0,
-))
-const lowStockCount = computed(() => products.value.filter(
-  (product) => Number(product.quantity) > 0 && Number(product.quantity) <= 5,
-).length)
-const outOfStockCount = computed(() => products.value.filter(
-  (product) => Number(product.quantity) === 0,
-).length)
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('en-PH', {
@@ -50,13 +33,6 @@ function formatCurrency(value) {
     currency: 'PHP',
     maximumFractionDigits: 2,
   }).format(Number(value) || 0)
-}
-
-function stockLabel(quantity) {
-  const count = Number(quantity)
-  if (count === 0) return 'Out of stock'
-  if (count <= 5) return 'Low stock'
-  return 'In stock'
 }
 
 async function loadProducts() {
@@ -252,58 +228,32 @@ onMounted(async () => {
   </main>
 
   <main v-else class="app-shell">
-    <aside class="sidebar">
-      <a class="brand-lockup side-brand" href="/" aria-label="Stockroom home">
-        <span class="brand-mark" aria-hidden="true">S</span>
-        <span>stockroom</span>
-      </a>
-
-      <div class="workspace-label">WORKSPACE</div>
-      <nav class="side-nav" aria-label="Main navigation">
-        <a class="nav-link nav-link-active" href="#inventory" aria-current="page">
-          <span class="nav-glyph" aria-hidden="true">▦</span>
-          Inventory
+    <section class="main-panel">
+      <header class="topbar">
+        <a class="brand-lockup header-brand" href="/" aria-label="Stockroom home">
+          <span class="brand-mark" aria-hidden="true">S</span>
+          <span>stockroom</span>
         </a>
-        <a class="nav-link" href="#stock-summary" @click.prevent="activeFilter = 'low'">
-          <span class="nav-glyph" aria-hidden="true">⌁</span>
-          Stock alerts
-          <span v-if="lowStockCount + outOfStockCount" class="nav-count">{{ lowStockCount + outOfStockCount }}</span>
-        </a>
-      </nav>
-
-      <div class="sidebar-bottom">
-        <div class="help-panel">
-          <span class="help-icon" aria-hidden="true">?</span>
-          <strong>Need a hand?</strong>
-          <span>Contact your workspace administrator.</span>
-        </div>
-        <button class="account-button" type="button" @click="signOut">
-          <span class="avatar">{{ (user.username || user.email || 'U').slice(0, 1).toUpperCase() }}</span>
+        <div class="topbar-right">
+          <span class="avatar" aria-hidden="true">{{ (user.username || user.email || 'U').slice(0, 1).toUpperCase() }}</span>
           <span class="account-meta">
             <strong>{{ user.username || user.email }}</strong>
             <small>{{ user.role }}</small>
           </span>
-          <span class="account-exit" aria-hidden="true">↗</span>
-        </button>
-      </div>
-    </aside>
-
-    <section id="inventory" class="main-panel">
-      <header class="topbar">
-        <div class="breadcrumb"><span>Workspace</span><span aria-hidden="true">/</span><strong>Inventory</strong></div>
-        <div class="topbar-right">
-          <span class="today-label">{{ new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }) }}</span>
-          <span class="topbar-divider"></span>
           <span class="role-chip">{{ user.role }}</span>
+          <button class="button logout-button" type="button" @click="signOut">
+            <span aria-hidden="true">↗</span>
+            Log out
+          </button>
         </div>
       </header>
 
       <div class="content-wrap">
         <div class="page-heading">
           <div>
-            <p class="eyebrow">Your workspace</p>
-            <h1>Inventory</h1>
-            <p class="page-description">A current view of your products and stock levels.</p>
+            <p class="eyebrow">Product management</p>
+            <h1>Products</h1>
+            <p class="page-description">View and manage your product list.</p>
           </div>
           <button v-if="isAdmin" class="button button-primary add-button" type="button" @click="openCreateForm">
             <span class="plus-mark" aria-hidden="true">+</span>
@@ -311,30 +261,11 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div class="summary-grid" id="stock-summary">
-          <article class="summary-block summary-primary">
-            <span class="summary-label">Products listed</span>
-            <strong>{{ products.length }}</strong>
-            <span class="summary-caption">Across your inventory</span>
-            <span class="summary-symbol" aria-hidden="true">▤</span>
-          </article>
-          <article class="summary-block">
-            <span class="summary-label">Stock value</span>
-            <strong>{{ formatCurrency(inventoryValue) }}</strong>
-            <span class="summary-caption">Price multiplied by quantity</span>
-          </article>
-          <article class="summary-block summary-alert">
-            <span class="summary-label">Needs attention</span>
-            <strong>{{ lowStockCount + outOfStockCount }}</strong>
-            <span class="summary-caption">{{ lowStockCount }} low stock, {{ outOfStockCount }} out of stock</span>
-          </article>
-        </div>
-
-        <section class="inventory-section" aria-labelledby="inventory-title">
+        <section id="inventory" class="inventory-section" aria-labelledby="inventory-title">
           <div class="section-heading">
             <div>
-              <h2 id="inventory-title">All products</h2>
-              <p>Browse and manage your current stock.</p>
+              <h2 id="inventory-title">Product list <span class="product-count">{{ products.length }}</span></h2>
+              <p>Product details, prices, and quantities.</p>
             </div>
             <button class="button button-quiet refresh-button" type="button" :disabled="loadingProducts" @click="loadProducts">
               <span aria-hidden="true">↻</span> Refresh
@@ -347,21 +278,7 @@ onMounted(async () => {
               <span class="sr-only">Search products</span>
               <input v-model="search" type="search" placeholder="Search products" />
             </label>
-            <div class="filter-tabs" aria-label="Filter products">
-              <button
-                v-for="filter in [
-                  { key: 'all', label: 'All' },
-                  { key: 'low', label: 'Low stock' },
-                  { key: 'out', label: 'Out of stock' },
-                ]"
-                :key="filter.key"
-                type="button"
-                :class="{ 'filter-active': activeFilter === filter.key }"
-                @click="activeFilter = filter.key"
-              >
-                {{ filter.label }}
-              </button>
-            </div>
+            <span class="search-count">{{ visibleProducts.length }} shown</span>
           </div>
 
           <p v-if="notice" class="inline-notice" role="status">
@@ -382,7 +299,6 @@ onMounted(async () => {
                   <th scope="col">Product</th>
                   <th scope="col">Price</th>
                   <th scope="col">Quantity</th>
-                  <th scope="col">Status</th>
                   <th v-if="isAdmin" scope="col" class="actions-heading">Actions</th>
                 </tr>
               </thead>
@@ -398,13 +314,8 @@ onMounted(async () => {
                     </div>
                   </td>
                   <td data-label="Price" class="price-cell">{{ formatCurrency(product.price) }}</td>
-                  <td data-label="Quantity"><span class="quantity-value">{{ product.quantity }}</span></td>
-                  <td data-label="Status">
-                    <span class="stock-status" :class="`status-${Number(product.quantity) === 0 ? 'out' : Number(product.quantity) <= 5 ? 'low' : 'in'}`">
-                      {{ stockLabel(product.quantity) }}
-                    </span>
-                  </td>
-                  <td v-if="isAdmin" data-label="Actions">
+                  <td data-label="Quantity" class="quantity-cell"><span class="quantity-value">{{ product.quantity }}</span></td>
+                  <td v-if="isAdmin" data-label="Actions" class="actions-cell">
                     <div class="row-actions">
                       <button type="button" class="text-action" @click="openEditForm(product)">Edit</button>
                       <button type="button" class="text-action text-action-danger" @click="removeProduct(product)">Delete</button>
@@ -416,14 +327,14 @@ onMounted(async () => {
           </div>
           <div v-else class="empty-state">
             <span class="empty-mark" aria-hidden="true">▤</span>
-            <h3>{{ search || activeFilter !== 'all' ? 'No matching products' : 'Your inventory is empty' }}</h3>
-            <p>{{ search || activeFilter !== 'all' ? 'Try another search or filter.' : 'Add a product to start keeping track of stock.' }}</p>
+            <h3>{{ search ? 'No matching products' : 'Your product list is empty' }}</h3>
+            <p>{{ search ? 'Try another search term.' : 'Add a product to get started.' }}</p>
             <button v-if="isAdmin && !products.length" class="button button-primary" type="button" @click="openCreateForm">
               Add your first product
             </button>
           </div>
           <div class="table-footer">
-            <span>Showing {{ visibleProducts.length }} of {{ products.length }} products</span>
+            <span>{{ visibleProducts.length }} of {{ products.length }} products</span>
             <span v-if="!isAdmin">Read-only access</span>
           </div>
         </section>
